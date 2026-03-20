@@ -1,49 +1,45 @@
-# -----------------------------
-# Stage 1: Build with Maven
-# -----------------------------
+# Use Java 17 with Maven preinstalled
 FROM eclipse-temurin:17-jdk-jammy AS build
 
-WORKDIR /app
+# Set working directory
+WORKDIR /build
 
-# Install Maven
-RUN apt-get update && \
-    apt-get install -y maven && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copy only POMs first to cache dependencies
-COPY pom.xml .
+# Copy only pom.xml files first for caching dependencies
+COPY pom.xml ./
 COPY phcnnode/pom.xml phcnnode/
 COPY lemonpayredis/pom.xml lemonpayredis/
 COPY eedc/pom.xml eedc/
-# Add other module POMs if needed
 
-# Copy missing local JARs into the image
-# Make sure you have these JARs in a folder called 'jars' in your repo
-COPY jars/lemonpay-phcnnode-1.0.jar jars/
-COPY jars/eedc-0.0.1-SNAPSHOT.jar jars/
+# Install Maven (if not already available)
+RUN apt-get update && apt-get install -y maven && rm -rf /var/lib/apt/lists/*
 
-# Install the local JARs into Maven local repository
-RUN mvn install:install-file -Dfile=jars/lemonpay-phcnnode-1.0.jar -DgroupId=com.lemonpay.lemonpayvas -DartifactId=lemonpay-phcnnode -Dversion=1.0 -Dpackaging=jar && \
-    mvn install:install-file -Dfile=jars/eedc-0.0.1-SNAPSHOT.jar -DgroupId=com.lemonpay -DartifactId=eedc -Dversion=0.0.1-SNAPSHOT -Dpackaging=jar
+# Copy JAR dependencies folder if it exists
+# This avoids build failure if some local JARs are missing
+COPY jars/ jars/
 
-# Copy the rest of the source code
+# Install local JARs if they exist
+RUN if [ -f jars/lemonpay-phcnnode-1.0.jar ]; then \
+        mvn install:install-file -Dfile=jars/lemonpay-phcnnode-1.0.jar \
+            -DgroupId=com.lemonpay.lemonpayvas -DartifactId=lemonpay-phcnnode \
+            -Dversion=1.0 -Dpackaging=jar; \
+    else echo "lemonpay-phcnnode JAR missing, skipping"; fi
+
+RUN if [ -f jars/eedc-0.0.1-SNAPSHOT.jar ]; then \
+        mvn install:install-file -Dfile=jars/eedc-0.0.1-SNAPSHOT.jar \
+            -DgroupId=com.lemonpay -DartifactId=eedc \
+            -Dversion=0.0.1-SNAPSHOT -Dpackaging=jar; \
+    else echo "eedc JAR missing, skipping"; fi
+
+# Copy the full source code after caching dependencies
 COPY . .
 
-# Build the project
+# Build each module safely, skipping if a module folder doesn't exist
+RUN if [ -d phcnnode ]; then cd phcnnode && mvn clean install -DskipTests; fi
+RUN if [ -d lemonpayredis ]; then cd lemonpayredis && mvn clean install -DskipTests; fi
+RUN if [ -d eedc ]; then cd eedc && mvn clean install -DskipTests; fi
+
+# Package main application
 RUN mvn clean package -DskipTests
 
-# -----------------------------
-# Stage 2: Minimal runtime image
-# -----------------------------
-FROM eclipse-temurin:17-jre-jammy
-
-WORKDIR /app
-
-# Copy the built JAR from the build stage
-COPY --from=build /app/target/lemonpay-electricity-0.0.1-SNAPSHOT.jar /app/lemonpay-electricity.jar
-
-# Expose the port
-EXPOSE 8282
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "/app/lemonpay-electricity.jar"]
+# Set the entrypoint with the built JAR
+ENTRYPOINT ["java", "-jar", "/build/target/lemonpay-electricity-0.0.1-SNAPSHOT.jar"]
