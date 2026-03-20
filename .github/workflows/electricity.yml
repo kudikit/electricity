@@ -21,7 +21,7 @@ jobs:
       # Step 3: Build Docker image
       - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/electricity-service:latest .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/electricity-service:latest -f Dockerfile.electricity .
 
       # Step 4: Push image to Docker Hub
       - name: Push Docker image
