@@ -1,24 +1,35 @@
-# Stage 1: Build with Maven
+# -----------------------------
+# Build stage
+# -----------------------------
+# Use Maven with JDK 17 to compile and package the app
 FROM maven:3.9.0-eclipse-temurin-17 AS build
+
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy only pom.xml to cache dependencies
+# Copy only the pom.xml first to leverage Docker cache for dependencies
 COPY pom.xml .
-RUN mvn dependency:go-offline
 
-# Copy source and build
+# Copy source code into the container
 COPY src ./src
+
+# Download dependencies and build the application JAR, skipping tests
 RUN mvn clean package -DskipTests
 
-# Stage 2: Slim runtime
-FROM eclipse-temurin:17-jdk-alpine AS runtime
+# -----------------------------
+# Runtime stage
+# -----------------------------
+# Use a lightweight JDK 17 runtime image
+FROM eclipse-temurin:17-jre
+
+# Set working directory for runtime
 WORKDIR /app
 
-# Copy the jar from build stage
+# Copy the built JAR from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose service port
+# Expose port 8282 for the service
 EXPOSE 8282
 
-# Run app
-ENTRYPOINT ["java","-jar","app.jar"]
+# Run the application
+CMD ["java", "-jar", "app.jar"]
