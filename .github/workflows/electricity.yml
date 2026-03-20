@@ -50,5 +50,5 @@ jobs:
               --name electricity \
               --network mysql_db_setup_kudikit-net \
               -p 8282:8282 \
-              --env-file /home/devops/db-services/electricity.env \
+              --env-file /home/devops/db-services/electricity/ .env \
               ${{ secrets.DOCKER_USERNAME }}/electricity-service:latest
