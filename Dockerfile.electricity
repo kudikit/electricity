@@ -1,0 +1,24 @@
+# Stage 1: Build with Maven
+FROM maven:3.9.0-eclipse-temurin-17 AS build
+WORKDIR /app
+
+# Copy only pom.xml to cache dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
+# Copy source and build
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Slim runtime
+FROM eclipse-temurin:17-jdk-alpine AS runtime
+WORKDIR /app
+
+# Copy the jar from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose service port
+EXPOSE 8282
+
+# Run app
+ENTRYPOINT ["java","-jar","app.jar"]
