@@ -1,45 +1,14 @@
-# Use Java 17 with Maven preinstalled
-FROM eclipse-temurin:17-jdk-jammy AS build
-
-# Set working directory
-WORKDIR /build
-
-# Copy only pom.xml files first for caching dependencies
-COPY pom.xml ./
-COPY phcnnode/pom.xml phcnnode/
-COPY lemonpayredis/pom.xml lemonpayredis/
-COPY eedc/pom.xml eedc/
-
-# Install Maven (if not already available)
-RUN apt-get update && apt-get install -y maven && rm -rf /var/lib/apt/lists/*
-
-# Copy JAR dependencies folder if it exists
-# This avoids build failure if some local JARs are missing
-COPY jars/ jars/
-
-# Install local JARs if they exist
-RUN if [ -f jars/lemonpay-phcnnode-1.0.jar ]; then \
-        mvn install:install-file -Dfile=jars/lemonpay-phcnnode-1.0.jar \
-            -DgroupId=com.lemonpay.lemonpayvas -DartifactId=lemonpay-phcnnode \
-            -Dversion=1.0 -Dpackaging=jar; \
-    else echo "lemonpay-phcnnode JAR missing, skipping"; fi
-
-RUN if [ -f jars/eedc-0.0.1-SNAPSHOT.jar ]; then \
-        mvn install:install-file -Dfile=jars/eedc-0.0.1-SNAPSHOT.jar \
-            -DgroupId=com.lemonpay -DartifactId=eedc \
-            -Dversion=0.0.1-SNAPSHOT -Dpackaging=jar; \
-    else echo "eedc JAR missing, skipping"; fi
-
-# Copy the full source code after caching dependencies
-COPY . .
-
-# Build each module safely, skipping if a module folder doesn't exist
-RUN if [ -d phcnnode ]; then cd phcnnode && mvn clean install -DskipTests; fi
-RUN if [ -d lemonpayredis ]; then cd lemonpayredis && mvn clean install -DskipTests; fi
-RUN if [ -d eedc ]; then cd eedc && mvn clean install -DskipTests; fi
-
-# Package main application
+# Stage 1: Build stage
+FROM maven:3.9.6-eclipse-temurin-17 AS builder
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B -q -e -DskipTests dependency:go-offline
+COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Set the entrypoint with the built JAR
-ENTRYPOINT ["java", "-jar", "/build/target/lemonpay-electricity-0.0.1-SNAPSHOT.jar"]
+# Stage 2: Runtime stage
+FROM eclipse-temurin:17-jdk-alpine
+WORKDIR /app
+COPY --from=builder /app/target/*.jar app.jar
+EXPOSE 8383
+ENTRYPOINT ["java","-jar","app.jar"]
