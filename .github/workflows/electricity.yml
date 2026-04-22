@@ -3,7 +3,7 @@ name: Build and Deploy Kudikitgateway
 on:
   push:
     branches:
-      - main
+      - development
 
 jobs:
   deploy:
